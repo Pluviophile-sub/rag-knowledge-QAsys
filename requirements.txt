@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+python-multipart
+requests
+openai
+numpy
+faiss-cpu
+rank_bm25
+jieba
+pymupdf
+python-docx
+pandas
+openpyxl
+sqlalchemy

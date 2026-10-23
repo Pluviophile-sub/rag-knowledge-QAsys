@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAG 多源知识库问答系统</title>
+<style>
+:root{
+  --ink:#0f172a; --ink-2:#334155; --muted:#64748b; --faint:#94a3b8;
+  --line:#e5e9f0; --line-2:#eef2f7;
+  --bg:#f5f7fb; --card:#ffffff;
+  --pri:#2563eb; --pri-soft:#eff4ff; --pri-line:#c7d7fe;
+  --ok:#15803d; --ok-bg:#e8f7ee; --warn:#b45309; --warn-bg:#fef4e6; --bad:#b91c1c; --bad-bg:#feecec;
+  --shadow:0 1px 2px rgba(16,24,40,.04), 0 10px 30px rgba(16,24,40,.06);
+  --shadow-sm:0 1px 2px rgba(16,24,40,.06);
+  --r:14px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);font-size:15px;
+  font-family:"Microsoft YaHei","PingFang SC","Helvetica Neue",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.app{display:flex;min-height:100vh}
+
+/* ---------------- 侧边栏 ---------------- */
+.side{
+  width:236px;flex:0 0 236px;background:linear-gradient(180deg,#0f172a 0%,#111c33 100%);
+  color:#cbd5e1;padding:22px 16px;display:flex;flex-direction:column;gap:22px;
+  position:sticky;top:0;height:100vh;
+}
+.brand{display:flex;align-items:center;gap:10px;padding:0 6px}
+.logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);
+  display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(59,130,246,.45)}
+.logo svg{width:19px;height:19px;fill:#fff}
+.brand h1{margin:0;font-size:15.2px;color:#f8fafc;line-height:1.35;letter-spacing:.2px}
+.brand span{display:block;font-size:11px;color:#7c8db5;font-weight:400;margin-top:2px}
+.nav{display:flex;flex-direction:column;gap:4px}
+.nav button{
+  all:unset;display:flex;align-items:center;gap:10px;cursor:pointer;
+  padding:11px 12px;border-radius:10px;font-size:14.6px;color:#94a3b8;transition:.16s;
+}
+.nav button svg{width:17px;height:17px;fill:currentColor;opacity:.85}
+.nav button:hover{background:rgba(148,163,184,.12);color:#e2e8f0}
+.nav button.active{background:linear-gradient(90deg,rgba(37,99,235,.95),rgba(59,130,246,.75));color:#fff;
+  box-shadow:0 6px 18px rgba(37,99,235,.35)}
+.side-foot{margin-top:auto;background:rgba(148,163,184,.10);border:1px solid rgba(148,163,184,.14);
+  border-radius:12px;padding:12px}
+.side-foot .t{font-size:11px;color:#7c8db5;letter-spacing:.6px;margin-bottom:8px}
+.svc{display:flex;align-items:center;gap:8px;font-size:12px;color:#cbd5e1;padding:3px 0}
+.dot{width:7px;height:7px;border-radius:50%;background:#64748b;flex:0 0 7px}
+.dot.ok{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.18)}
+.dot.warn{background:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.18)}
+.dot.bad{background:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.18)}
+
+/* ---------------- 主区 ---------------- */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{
+  background:rgba(255,255,255,.86);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);padding:16px 30px;
+  display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:5;
+}
+.topbar h2{margin:0;font-size:17.5px;letter-spacing:.2px}
+.topbar .sub{font-size:12.8px;color:var(--muted)}
+.topbar .right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.pill{display:inline-flex;align-items:center;gap:6px;background:var(--pri-soft);color:#1d4ed8;
+  border:1px solid var(--pri-line);border-radius:999px;padding:5px 11px;font-size:11.5px;font-weight:600}
+.view{padding:24px 30px 40px;max-width:1180px;width:100%;margin:0 auto}
+.hide{display:none!important}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+
+/* ---------------- 问答 ---------------- */
+.chat-wrap{display:flex;flex-direction:column;height:calc(100vh - 108px);min-height:520px}
+.chat-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 18px;border-bottom:1px solid var(--line-2)}
+.field{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2)}
+select{
+  appearance:none;background:#fff url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E") no-repeat right 10px center;
+  border:1px solid var(--line);border-radius:9px;padding:8px 28px 8px 11px;font-size:13.4px;color:var(--ink);font-family:inherit;cursor:pointer;
+}
+select:focus{outline:2px solid var(--pri-soft);border-color:var(--pri-line)}
+.switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.switch input{display:none}
+.track{width:38px;height:21px;border-radius:999px;background:#cbd5e1;position:relative;transition:.18s}
+.track::after{content:"";position:absolute;top:2.5px;left:2.5px;width:16px;height:16px;border-radius:50%;background:#fff;
+  box-shadow:var(--shadow-sm);transition:.18s}
+.switch input:checked + .track{background:var(--pri)}
+.switch input:checked + .track::after{transform:translateX(17px)}
+
+#msgs{flex:1;overflow-y:auto;padding:22px 22px 8px;display:flex;flex-direction:column;gap:16px;scroll-behavior:smooth}
+#msgs::-webkit-scrollbar{width:8px}
+#msgs::-webkit-scrollbar-thumb{background:#d7dee9;border-radius:8px}
+.msg{display:flex;gap:10px;max-width:100%}
+.msg.user{justify-content:flex-end}
+.avatar{width:30px;height:30px;border-radius:9px;flex:0 0 30px;display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;color:#fff;background:linear-gradient(135deg,#3b82f6,#8b5cf6)}
+.msg.user .avatar{background:linear-gradient(135deg,#0ea5e9,#22c55e);order:2}
+.bubble{max-width:min(780px,80%);padding:15px 18px;border-radius:14px;line-height:1.8;font-size:15.4px;
+  white-space:pre-wrap;word-break:break-word;border:1px solid var(--line);background:#fff;box-shadow:var(--shadow-sm)}
+.msg.user .bubble{background:linear-gradient(135deg,#2563eb,#4f46e5);color:#fff;border:0;border-top-right-radius:5px}
+.msg.bot .bubble{border-top-left-radius:5px}
+.cursor{display:inline-block;width:7px;height:15px;background:var(--pri);margin-left:2px;vertical-align:-2px;
+  animation:blink 1s steps(1) infinite;border-radius:1px}
+@keyframes blink{50%{opacity:0}}
+.cites{margin-top:11px;display:flex;flex-direction:column;gap:7px}
+.cites .hd{font-size:11.5px;color:var(--muted);letter-spacing:.4px;display:flex;align-items:center;gap:6px}
+.cite{background:#fbfdff;border:1px solid var(--line);border-left:3px solid var(--pri);border-radius:9px;padding:10px 13px;font-size:13.6px;color:var(--ink-2)}
+.cite .top{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.cite .no{background:var(--pri-soft);color:#1d4ed8;border-radius:6px;padding:1px 7px;font-weight:700;font-size:12.5px}
+.cite .src{color:var(--ink);font-weight:600;font-size:13.2px}
+.cite .body{color:var(--muted);line-height:1.7;max-height:3.4em;overflow:hidden;transition:max-height .2s}
+.cite.open .body{max-height:16em;overflow:auto}
+.cite .more{color:var(--pri);font-size:11.5px;cursor:pointer;margin-top:4px;display:inline-block}
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--muted);text-align:center}
+.empty .ic{width:56px;height:56px;border-radius:16px;background:var(--pri-soft);display:flex;align-items:center;justify-content:center}
+.empty .ic svg{width:28px;height:28px;fill:#2563eb}
+.empty h3{margin:0;font-size:15px;color:var(--ink)}
+.empty p{margin:0;font-size:12.5px}
+.samples{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:620px;margin-top:4px}
+.samples button{all:unset;cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:999px;
+  padding:8px 14px;font-size:13.2px;color:var(--ink-2);transition:.15s}
+.samples button:hover{border-color:var(--pri-line);color:#1d4ed8;background:var(--pri-soft)}
+.composer{padding:14px 18px 18px;border-top:1px solid var(--line-2);display:flex;gap:10px;align-items:flex-end}
+.inputbox{flex:1;display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);
+  border-radius:12px;padding:4px 6px 4px 14px;transition:.16s}
+.inputbox:focus-within{border-color:var(--pri-line);box-shadow:0 0 0 4px var(--pri-soft)}
+.inputbox input{flex:1;border:0;outline:0;padding:11px 0;font-size:15px;font-family:inherit;color:var(--ink);background:transparent}
+.btn{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;
+  font-size:14px;font-weight:600;transition:.16s;white-space:nowrap}
+.btn.pri{background:linear-gradient(135deg,#2563eb,#4f46e5);color:#fff;box-shadow:0 6px 16px rgba(37,99,235,.28)}
+.btn.pri:hover{filter:brightness(1.05)}
+.btn.ghost{background:#fff;color:var(--ink-2);border:1px solid var(--line)}
+.btn.ghost:hover{border-color:var(--pri-line);color:#1d4ed8;background:var(--pri-soft)}
+.btn.danger{background:var(--bad-bg);color:var(--bad);border:1px solid #fecaca}
+.btn:disabled{opacity:.55;cursor:not-allowed;box-shadow:none}
+.btn.sm{padding:7px 11px;font-size:12.2px;font-weight:500}
+
+/* ---------------- 知识库 ---------------- */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;box-shadow:var(--shadow-sm)}
+.stat .k{font-size:12.4px;color:var(--muted);letter-spacing:.5px}
+.stat .v{font-size:29px;font-weight:700;margin-top:6px;letter-spacing:.5px}
+.stat .v small{font-size:12px;font-weight:500;color:var(--muted);margin-left:4px}
+.drop{border:1.5px dashed #cbd5e1;border-radius:var(--r);padding:26px;text-align:center;background:#fbfdff;
+  transition:.16s;margin-bottom:16px}
+.drop.hot{border-color:var(--pri);background:var(--pri-soft)}
+.drop .ic{width:44px;height:44px;border-radius:12px;background:var(--pri-soft);display:inline-flex;align-items:center;justify-content:center;margin-bottom:8px}
+.drop .ic svg{width:22px;height:22px;fill:#2563eb}
+.drop b{display:block;font-size:14.4px;margin-bottom:3px}
+.drop span{font-size:12.8px;color:var(--muted)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.tbl-wrap{background:#fff;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow-sm)}
+table{width:100%;border-collapse:collapse;font-size:14.2px}
+th{background:#f8fafc;color:var(--ink-2);font-weight:600;font-size:13.2px;letter-spacing:.3px;text-align:left;
+  padding:11px 14px;border-bottom:1px solid var(--line)}
+td{padding:11px 14px;border-bottom:1px solid var(--line-2);color:var(--ink-2)}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover{background:#fbfdff}
+.badge{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 10px;font-size:12.6px;font-weight:600}
+.badge.ok{background:var(--ok-bg);color:var(--ok)}
+.badge.warn{background:var(--warn-bg);color:var(--warn)}
+.badge.bad{background:var(--bad-bg);color:var(--bad)}
+.mono{font-variant-numeric:tabular-nums}
+.hint{font-size:12.8px;color:var(--muted);margin:10px 0 0}
+#upmsg{font-size:12.5px;color:var(--ink-2);margin-bottom:12px;min-height:18px}
+
+/* ---------------- 检索调试 ---------------- */
+.dbg-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.wf{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.wf .step{flex:1;min-width:130px;background:#fff;border:1px solid var(--line);border-radius:11px;padding:10px 12px;box-shadow:var(--shadow-sm)}
+.wf .step .n{font-size:12.4px;color:var(--muted)}
+.wf .step .t{font-size:18.5px;font-weight:700;margin:3px 0 6px}
+.wf .step .bar{height:4px;border-radius:4px;background:var(--line-2);overflow:hidden}
+.wf .step .bar i{display:block;height:100%;background:linear-gradient(90deg,#60a5fa,#2563eb);border-radius:4px}
+.grid4{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+@media(max-width:980px){.grid4{grid-template-columns:1fr}.stats{grid-template-columns:1fr}}
+.stage{background:#fff;border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow-sm);overflow:hidden}
+.stage .sh{display:flex;align-items:center;gap:8px;padding:12px 15px;border-bottom:1px solid var(--line-2);background:#fcfdff}
+.stage .sh .idx{width:22px;height:22px;border-radius:6px;background:var(--pri-soft);color:#1d4ed8;font-size:12.4px;
+  font-weight:700;display:flex;align-items:center;justify-content:center}
+.stage .sh b{font-size:14px}
+.stage .sh em{margin-left:auto;font-style:normal;font-size:11.5px;color:var(--muted)}
+.stage .sb{padding:6px 10px 10px;max-height:330px;overflow:auto}
+.item{padding:10px 6px;border-bottom:1px dashed var(--line-2);font-size:13.3px}
+.item:last-child{border-bottom:0}
+.item .r1{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.item .rank{width:19px;height:19px;border-radius:5px;background:#f1f5f9;color:var(--ink-2);font-size:11px;
+  font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+.item .sc{margin-left:auto;font-size:12.4px;color:var(--muted);font-variant-numeric:tabular-nums}
+.item .bar{height:3px;border-radius:3px;background:var(--line-2);margin:5px 0 6px;overflow:hidden}
+.item .bar i{display:block;height:100%;background:linear-gradient(90deg,#93c5fd,#3b82f6);border-radius:3px}
+.item .src{color:var(--ink);font-weight:600;font-size:12.9px}
+.item .tx{color:var(--muted);line-height:1.6;margin-top:3px}
+.none{padding:22px;text-align:center;color:var(--faint);font-size:12.5px}
+.toast{position:fixed;right:26px;bottom:26px;background:#0f172a;color:#e2e8f0;border-radius:11px;
+  padding:12px 16px;font-size:13px;box-shadow:0 12px 30px rgba(15,23,42,.28);opacity:0;transform:translateY(10px);
+  transition:.22s;z-index:99;max-width:360px}
+.toast.show{opacity:1;transform:translateY(0)}
+
+/* ---- 答案排版（Markdown 轻渲染） ---- */
+.ans>p{margin:.4em 0}
+.ans>p:first-child{margin-top:0}
+.ans>p:last-child{margin-bottom:0}
+.ans h4{margin:.7em 0 .3em;font-size:13.6px;color:#0f172a;font-weight:700}
+.ans ul{margin:.3em 0 .4em 1.15em;padding:0}
+.ans li{margin:.2em 0}
+.ans strong{color:#0f172a}
+.ans code{background:#f1f5f9;border:1px solid var(--line);border-radius:5px;padding:0 4px;font-size:12.6px}
+.cite-ref{color:#1d4ed8;font-weight:700;cursor:pointer;padding:0 1px;border-radius:3px}
+.cite-ref:hover{background:var(--pri-soft)}
+.cite.flash{box-shadow:0 0 0 3px rgba(37,99,235,.22);border-left-color:#1d4ed8}
+.copy-btn{all:unset;cursor:pointer;font-size:11.5px;color:var(--muted);margin-top:9px;display:inline-flex;
+  gap:5px;align-items:center;padding:3px 8px;border-radius:6px;border:1px solid transparent}
+.copy-btn:hover{color:#1d4ed8;background:var(--pri-soft);border-color:var(--pri-line)}
+.wf .step .pct{font-size:11.6px;color:var(--faint);margin-left:6px;font-weight:400}
+.wf .step.slow .t{color:#b91c1c}
+.wf .step.slow .bar i{background:linear-gradient(90deg,#fca5a5,#ef4444)}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.2L21 10l-5 4.3L17.6 21 12 17.3 6.4 21 8 14.3 3 10l6.6-1.8z"/></svg></div>
+      <h1>混合数据源智能问答<span>Retrieval-Augmented Generation</span></h1>
+    </div>
+    <nav class="nav">
+      <button id="nav-chat" class="active" onclick="tab('chat')">
+        <svg viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 012 2v9a2 2 0 01-2 2H9l-5 4v-4H4a2 2 0 01-2-2V6a2 2 0 012-2z"/></svg>
+        智能问答
+      </button>
+      <button id="nav-kb" onclick="tab('kb')">
+        <svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 012-2h9l5 5v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm10-1v5h5"/></svg>
+        知识库管理
+      </button>
+      <button id="nav-dbg" onclick="tab('dbg')">
+        <svg viewBox="0 0 24 24"><path d="M4 20V10h3v10H4zm6.5 0V4h3v16h-3zM17 20v-7h3v7h-3z"/></svg>
+        检索调试
+      </button>
+    </nav>
+    <div class="side-foot">
+      <div class="t">运行状态</div>
+      <div class="svc"><i class="dot" id="dot-emb"></i><span id="txt-emb">嵌入服务检测中…</span></div>
+      <div class="svc"><i class="dot" id="dot-llm"></i><span id="txt-llm">生成模型检测中…</span></div>
+      <div class="svc"><i class="dot" id="dot-idx"></i><span id="txt-idx">索引状态未知</span></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="page-title">智能问答</h2>
+      <span class="sub" id="page-sub">混合检索 + 重排序 + 流式生成 + 引用溯源</span>
+      <div class="right"><span class="pill" id="kb-pill">知识库 0 个片段</span></div>
+    </div>
+
+    <!-- 问答 -->
+    <section id="view-chat" class="view">
+      <div class="card chat-wrap">
+        <div class="chat-head">
+          <div class="field"><span>生成模型</span>
+            <select id="llm"><option value="cloud">云端 · DeepSeek</option><option value="local">本地 · Ollama</option></select>
+          </div>
+          <div class="field">
+            <label class="switch"><input type="checkbox" id="rerank" checked><span class="track"></span><span>重排序</span></label>
+          </div>
+          <span class="sub" style="margin-left:auto;font-size:12px;color:var(--muted)">回车发送 · 答案下方可展开引用原文</span>
+        </div>
+        <div id="msgs">
+          <div class="empty" id="chat-empty">
+            <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg></div>
+            <h3>用自然语言提问，答案自动标注来源</h3>
+            <p>支持 PDF / Word / Excel / 数据库四类数据源，检索过程可在「检索调试」中逐阶段查看</p>
+            <div class="samples">
+              <button onclick="useSample(this)">处理敏感个人信息前需要履行什么程序？</button>
+              <button onclick="useSample(this)">网络运营者对网络日志留存有什么要求？</button>
+              <button onclick="useSample(this)">重点法规清单中收录了哪几部法规？</button>
+            </div>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="inputbox">
+            <input id="q" type="text" placeholder="输入问题，例如：处理敏感个人信息有哪些要求？" onkeydown="if(event.key==='Enter')ask()">
+          </div>
+          <button class="btn pri" id="askbtn" onclick="ask()">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+            发送
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 知识库 -->
+    <section id="view-kb" class="view hide">
+      <div class="stats">
+        <div class="stat"><div class="k">数据源</div><div class="v" id="k-src">0<small>个</small></div></div>
+        <div class="stat"><div class="k">文本片段</div><div class="v" id="k-chunk">0<small>个</small></div></div>
+        <div class="stat"><div class="k">索引模式</div><div class="v" id="k-mode" style="font-size:17px">—</div></div>
+      </div>
+      <div class="drop" id="drop">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3l5 5h-3v6h-4V8H7l5-5zM5 18h14v2H5z"/></svg></div>
+        <b>把 PDF / Word / Excel 拖到这里，或点击选择文件</b>
+        <span>支持多选；解析后自动分块、向量化并重建索引</span>
+        <input type="file" id="files" multiple style="display:none">
+      </div>
+      <div class="actions">
+        <button class="btn pri" onclick="upload()">上传并入库</button>
+        <button class="btn ghost" onclick="importDB()">导入示例数据库</button>
+        <button class="btn ghost" onclick="rebuild()">重建索引</button>
+        <button class="btn ghost" onclick="loadSources()">刷新列表</button>
+      </div>
+      <div id="upmsg"></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>数据源名称</th><th>类型</th><th>片段数</th><th>状态</th><th>入库时间</th><th style="text-align:right">操作</th></tr></thead>
+          <tbody id="srctb"></tbody>
+        </table>
+      </div>
+      <p class="hint">提示：删除数据源后需要点一次「重建索引」，检索结果才会同步更新。</p>
+    </section>
+
+    <!-- 检索调试 -->
+    <section id="view-dbg" class="view hide">
+      <div class="dbg-head">
+        <div class="inputbox" style="flex:1;max-width:560px">
+          <input id="dq" type="text" placeholder="输入问题，查看四个阶段的检索结果与得分" onkeydown="if(event.key==='Enter')debugSearch()">
+        </div>
+        <button class="btn pri" onclick="debugSearch()">开始检索</button>
+        <span class="sub" style="font-size:12px;color:var(--muted)">得分条按本阶段最高分归一化</span>
+      </div>
+      <div class="wf" id="wf">
+        <div class="step"><div class="n">查询向量化</div><div class="t">—</div><div class="bar"><i style="width:0"></i></div></div>
+        <div class="step"><div class="n">向量检索</div><div class="t">—</div><div class="bar"><i style="width:0"></i></div></div>
+        <div class="step"><div class="n">BM25 检索</div><div class="t">—</div><div class="bar"><i style="width:0"></i></div></div>
+        <div class="step"><div class="n">RRF 融合</div><div class="t">—</div><div class="bar"><i style="width:0"></i></div></div>
+        <div class="step"><div class="n">重排序</div><div class="t">—</div><div class="bar"><i style="width:0"></i></div></div>
+      </div>
+      <div class="grid4">
+        <div class="stage"><div class="sh"><span class="idx">1</span><b>向量检索</b><em id="em-dense">—</em></div><div class="sb" id="st-dense"><div class="none">尚未检索</div></div></div>
+        <div class="stage"><div class="sh"><span class="idx">2</span><b>BM25 关键词检索</b><em id="em-sparse">—</em></div><div class="sb" id="st-sparse"><div class="none">尚未检索</div></div></div>
+        <div class="stage"><div class="sh"><span class="idx">3</span><b>RRF 融合排序</b><em id="em-fused">—</em></div><div class="sb" id="st-fused"><div class="none">尚未检索</div></div></div>
+        <div class="stage"><div class="sh"><span class="idx">4</span><b>重排序结果</b><em id="em-rer">—</em></div><div class="sb" id="st-rer"><div class="none">尚未检索</div></div></div>
+      </div>
+    </section>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ 通用 ============ */
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(window.__tt); window.__tt=setTimeout(()=>t.classList.remove('show'),2600);
+}
+function tab(name){
+  const subs={chat:['智能问答','混合检索 + 重排序 + 流式生成 + 引用溯源'],
+              kb:['知识库管理','多源数据接入 · 解析分块 · 索引构建'],
+              dbg:['检索调试','四阶段检索过程与耗时可视化']};
+  for(const v of ['chat','kb','dbg']){
+    document.getElementById('view-'+v).classList.toggle('hide', v!==name);
+    document.getElementById('nav-'+v).classList.toggle('active', v===name);
+  }
+  document.getElementById('page-title').textContent=subs[name][0];
+  document.getElementById('page-sub').textContent=subs[name][1];
+  if(name==='kb') loadSources();
+}
+function label(meta){
+  meta = meta||{};
+  let s = meta.file||'未知来源';
+  if(meta.page) s += '·第'+meta.page+'页';
+  if(meta.sheet) s += '·'+meta.sheet+'第'+meta.row+'行';
+  if(meta.table) s += '·'+meta.table+(meta.row?('第'+meta.row+'行'):'');
+  return s;
+}
+
+/* ============ 状态 ============ */
+let KB={sources:0,chunks:0};
+async function loadStatus(){
+  try{
+    const c = await (await fetch('/api/config')).json();
+    const embOk = !!c.siliconflow_key;
+    document.getElementById('dot-emb').className = 'dot ' + (embOk?'ok':'warn');
+    document.getElementById('txt-emb').textContent = embOk ? '嵌入服务 · 云端 bge-m3' : '嵌入服务 · 演示模式';
+    document.getElementById('dot-llm').className = 'dot ' + (c.deepseek_key?'ok':'bad');
+    document.getElementById('txt-llm').textContent = c.deepseek_key ? '生成模型 · DeepSeek 已配置' : '生成模型 · 未配置 Key';
+  }catch(e){
+    document.getElementById('dot-emb').className='dot bad';
+    document.getElementById('txt-emb').textContent='接口不可用';
+  }
+}
+function refreshKbPill(){
+  document.getElementById('kb-pill').textContent = '知识库 '+KB.chunks+' 个片段';
+  document.getElementById('k-src').innerHTML = KB.sources+'<small>个</small>';
+  document.getElementById('k-chunk').innerHTML = KB.chunks+'<small>个</small>';
+  document.getElementById('dot-idx').className = 'dot ' + (KB.chunks>0?'ok':'warn');
+  document.getElementById('txt-idx').textContent = KB.chunks>0 ? ('索引就绪 · '+KB.chunks+' 个片段') : '索引为空，请先入库';
+}
+loadStatus(); loadSources(); refreshKbPill();
+
+/* ============ 问答 ============ */
+let busy=false;
+function useSample(btn){
+  document.getElementById('q').value = btn.textContent.trim();
+  document.getElementById('q').focus();
+}
+async function ask(){
+  if(busy) return;
+  const q = document.getElementById('q').value.trim();
+  if(!q){ toast('请先输入问题'); return; }
+  busy=true; document.getElementById('askbtn').disabled=true;
+  const msgs=document.getElementById('msgs');
+  const em=document.getElementById('chat-empty'); if(em) em.remove();
+
+  const u=document.createElement('div'); u.className='msg user';
+  u.innerHTML='<div class="bubble">'+esc(q)+'</div><div class="avatar">我</div>';
+  msgs.appendChild(u);
+
+  const bot=document.createElement('div'); bot.className='msg bot';
+  bot.innerHTML='<div class="avatar">AI</div><div class="bubble"><span class="txt"></span><span class="cursor"></span><div class="ans hide"></div><div class="cites"></div></div>';
+  msgs.appendChild(bot);
+  msgs.scrollTop=msgs.scrollHeight;
+  const txt=bot.querySelector('.txt');
+  const cur=bot.querySelector('.cursor');
+  let raw='';
+
+  document.getElementById('q').value='';
+  try{
+    const resp = await fetch('/api/chat/stream',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({question:q, llm:document.getElementById('llm').value,
+                           rerank:document.getElementById('rerank').checked})});
+    const reader=resp.body.getReader(); const dec=new TextDecoder(); let buf='';
+    while(true){
+      const {value,done}=await reader.read(); if(done) break;
+      buf += dec.decode(value,{stream:true});
+      const parts=buf.split('\n\n'); buf=parts.pop();
+      for(const p of parts){
+        if(!p.startsWith('data: ')) continue;
+        let ev; try{ ev=JSON.parse(p.slice(6)); }catch(e){ continue; }
+        if(ev.type==='delta'){ raw += ev.text; txt.textContent = raw; msgs.scrollTop=msgs.scrollHeight; }
+        else if(ev.type==='error'){ raw += '\n⚠ '+ev.message; txt.textContent = raw; }
+        else if(ev.type==='done'){ finishAnswer(bot, raw, ev.citations||[]); }
+      }
+    }
+  }catch(e){ raw += '\n⚠ 请求失败：'+e; txt.textContent = raw; }
+  finishAnswer(bot, raw, null);
+  busy=false; document.getElementById('askbtn').disabled=false;
+}
+/* 把流式期间的纯文本升级成排版后的答案 + 可点击引用 */
+function finishAnswer(bot, raw, cites){
+  if(!bot || bot.dataset.done==='1') return;
+  const ans=bot.querySelector('.ans'), txt=bot.querySelector('.txt'), cur=bot.querySelector('.cursor');
+  if(raw && raw.trim() && ans && !ans.innerHTML.trim()){
+    ans.innerHTML = md(raw);
+    ans.classList.remove('hide');
+    if(txt) txt.classList.add('hide');
+    if(cur) cur.remove();
+    addCopy(bot, raw);
+  }
+  if(cites && cites.length){
+    const box=bot.querySelector('.cites');
+    renderCites(box, cites);
+    wireRefs(ans, box);
+  }
+  bot.dataset.done='1';
+}
+function md(raw){
+  const t = esc(raw);
+  const blocks = t.split(/\n\s*\n/);
+  const out = [];
+  for(let b of blocks){
+    b = b.trim();
+    if(!b) continue;
+    const lines = b.split('\n');
+    if(/^#{1,4}\s*/.test(lines[0])){
+      out.push('<h4>'+inlineMd(lines[0].replace(/^#{1,4}\s*/,''))+'</h4>');
+      const rest = lines.slice(1).join('\n').trim();
+      if(rest) out.push('<p>'+inlineMd(rest).replace(/\n/g,'<br>')+'</p>');
+      continue;
+    }
+    if(lines.every(l=>/^(?:[-*•]|\d+[.、])\s+/.test(l.trim()))){
+      out.push('<ul>'+lines.map(l=>'<li>'+inlineMd(l.trim().replace(/^(?:[-*•]|\d+[.、])\s+/,''))+'</li>').join('')+'</ul>');
+      continue;
+    }
+    out.push('<p>'+inlineMd(b).replace(/\n/g,'<br>')+'</p>');
+  }
+  return out.join('');
+}
+function inlineMd(s){
+  return s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+          .replace(/`([^`]+)`/g,'<code>$1</code>')
+          .replace(/\[(\d{1,2})\]/g,'<span class="cite-ref" data-n="$1">[$1]</span>');
+}
+function wireRefs(ansEl, citeEl){
+  if(!ansEl || !citeEl) return;
+  ansEl.querySelectorAll('.cite-ref').forEach(sp=>{
+    sp.addEventListener('click', ()=>{
+      const n = sp.getAttribute('data-n');
+      const card = citeEl.querySelector('.cite[data-no="'+n+'"]');
+      if(!card) return;
+      card.classList.add('open','flash');
+      card.scrollIntoView({block:'nearest', behavior:'smooth'});
+      setTimeout(()=>card.classList.remove('flash'), 1300);
+    });
+  });
+}
+function addCopy(bot, raw){
+  const b=document.createElement('button');
+  b.type='button'; b.className='copy-btn'; b.textContent='⧉ 复制答案';
+  b.onclick=()=>{
+    const done=()=>toast('已复制到剪贴板');
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(raw).then(done).catch(()=>toast('复制失败，请手动选择'));
+    }else{ toast('当前浏览器不支持一键复制'); }
+  };
+  bot.querySelector('.bubble').appendChild(b);
+}
+function renderCites(el, cites){
+  if(!cites.length){ el.innerHTML=''; return; }
+  el.innerHTML = '<div class="hd">📎 引用来源（点击展开原文）</div>' + cites.map(c=>
+    '<div class="cite" data-no="'+c.no+'" onclick="this.classList.toggle(\'open\')">'+
+      '<div class="top"><span class="no">['+c.no+']</span><span class="src">'+esc(c.source)+'</span></div>'+
+      '<div class="body">'+esc(c.text)+'</div>'+
+    '</div>').join('');
+}
+
+/* ============ 知识库 ============ */
+const drop=document.getElementById('drop'), fsel=document.getElementById('files');
+drop.addEventListener('click',()=>fsel.click());
+drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('hot');});
+drop.addEventListener('dragleave',()=>drop.classList.remove('hot'));
+drop.addEventListener('drop',e=>{
+  e.preventDefault(); drop.classList.remove('hot');
+  if(e.dataTransfer.files.length){ fsel.files=e.dataTransfer.files; toast('已选择 '+fsel.files.length+' 个文件'); }
+});
+fsel.addEventListener('change',()=>{ if(fsel.files.length) toast('已选择 '+fsel.files.length+' 个文件'); });
+
+async function upload(){
+  const fs=fsel.files;
+  if(!fs.length){ toast('请先选择文件'); return; }
+  const fd=new FormData();
+  for(const f of fs) fd.append('files', f);
+  document.getElementById('upmsg').textContent='上传解析中，请稍候…（大文件需要一点时间）';
+  try{
+    const r=await (await fetch('/api/kb/files',{method:'POST',body:fd})).json();
+    document.getElementById('upmsg').innerHTML = r.results.map(x=> x.ok?
+      '<span class="badge ok">✓</span> '+esc(x.name)+'　新增 '+x.chunks+' 个片段'
+      : '<span class="badge bad">✕</span> '+esc(x.name)+'　'+esc(x.error)).join('<br>');
+    toast('入库完成'); fsel.value=''; loadSources();
+  }catch(e){ document.getElementById('upmsg').textContent='上传失败：'+e; toast('上传失败'); }
+}
+async function importDB(){
+  document.getElementById('upmsg').textContent='导入数据库中…';
+  try{
+    const r=await (await fetch('/api/kb/import-db',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
+    document.getElementById('upmsg').innerHTML = r.ok?
+      '<span class="badge ok">✓</span> '+esc(r.name)+'　新增 '+r.chunks+' 个片段'
+      : '<span class="badge bad">✕</span> '+esc(r.error);
+    loadSources(); toast('导入完成');
+  }catch(e){ document.getElementById('upmsg').textContent='导入失败：'+e; }
+}
+async function rebuild(){
+  document.getElementById('upmsg').textContent='重建索引中…（需要调用嵌入模型，请稍候）';
+  try{
+    const r=await (await fetch('/api/kb/rebuild',{method:'POST'})).json();
+    document.getElementById('upmsg').innerHTML='<span class="badge ok">✓</span> 重建完成，共 '+r.chunks+' 个片段';
+    loadSources(); toast('索引重建完成');
+  }catch(e){ document.getElementById('upmsg').textContent='重建失败：'+e; }
+}
+async function loadSources(){
+  try{
+    const r=await (await fetch('/api/kb/sources')).json();
+    const srcs = r.sources||[];
+    KB.sources = srcs.length;
+    KB.chunks = srcs.reduce((a,s)=>a+(s.chunk_count||0),0);
+    document.getElementById('k-mode').textContent = (srcs.length? '混合检索（FAISS + BM25）' : '—');
+    document.getElementById('srctb').innerHTML = srcs.map(s=>{
+      const st = String(s.status||'');
+      const cls = st.indexOf('失败')>=0 ? 'bad' : (st==='已完成' ? 'ok' : 'warn');
+      return '<tr><td class="mono">'+s.id+'</td><td><b>'+esc(s.name)+'</b></td><td>'+esc(s.type)+'</td>'+
+        '<td class="mono">'+(s.chunk_count||0)+'</td>'+
+        '<td><span class="badge '+cls+'">'+esc(st)+'</span></td>'+
+        '<td class="mono" style="color:var(--muted);font-size:12px">'+esc(s.created_at)+'</td>'+
+        '<td style="text-align:right"><button class="btn danger sm" onclick="delSrc('+s.id+')">删除</button></td></tr>';
+    }).join('') || '<tr><td colspan="7" class="none">暂无数据源，请先上传文件或导入示例数据库</td></tr>';
+    refreshKbPill();
+  }catch(e){}
+}
+async function delSrc(id){
+  if(!confirm('确定删除该数据源？删除后需要重建索引。')) return;
+  await fetch('/api/kb/sources/'+id,{method:'DELETE'});
+  loadSources(); toast('已删除');
+}
+
+/* ============ 检索调试 ============ */
+async function debugSearch(){
+  const q=document.getElementById('dq').value.trim();
+  if(!q){ toast('请输入问题'); return; }
+  document.getElementById('em-dense').textContent='检索中…';
+  try{
+    const r=await (await fetch('/api/search',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({question:q, rerank: document.getElementById('rerank').checked})})).json();
+    if(r.error){ document.getElementById('em-dense').textContent='⚠ '+r.error; toast(r.error); return; }
+    drawWaterfall(r.timing||{});
+    fill('dense', r.dense); fill('sparse', r.sparse); fill('fused', r.fused); fill('rer', r.reranked);
+  }catch(e){ document.getElementById('em-dense').textContent=''; toast('检索失败：'+e); }
+}
+const STAGES=[['查询向量化'],['向量检索'],['BM25检索'],['RRF融合'],['重排序']];
+function drawWaterfall(t){
+  const keys=['查询向量化','向量检索','BM25检索','RRF融合','重排序'];
+  const vals=keys.map(k=> Number(t[k]||0));
+  const max=Math.max.apply(null, vals.concat([1]));
+  const total=vals.reduce((a,b)=>a+b,0) || 1;
+  const steps=document.querySelectorAll('#wf .step');
+  keys.forEach((k,i)=>{
+    const el=steps[i]; if(!el) return;
+    const v=vals[i];
+    const tEl=el.querySelector('.t');
+    if(t[k]==null){
+      tEl.textContent='—';
+    }else{
+      tEl.innerHTML = v+' ms<span class="pct">'+(v/total*100).toFixed(1)+'%</span>';
+    }
+    el.classList.toggle('slow', v>=800);
+    el.querySelector('.bar i').style.width = Math.round(v/max*100)+'%';
+  });
+}
+function fill(id, list){
+  list=list||[];
+  const box=document.getElementById('st-'+id);
+  const em=document.getElementById('em-'+id);
+  if(em) em.textContent = list.length? (list.length+' 条') : '—';
+  if(!list.length){ box.innerHTML='<div class="none">无结果</div>'; return; }
+  const shown=list.slice(0,10);
+  const max=Math.max.apply(null, shown.map(e=>Math.abs(Number(e.score)||0)).concat([1e-6]));
+  box.innerHTML = shown.map((e,i)=>{
+    const sc=Number(e.score)||0;
+    const pct=Math.max(4, Math.min(100, Math.round(Math.abs(sc)/max*100)));
+    return '<div class="item">'+
+      '<div class="r1"><span class="rank">'+(i+1)+'</span>'+
+        '<span class="src">'+esc(label(e.meta))+'</span>'+
+        '<span class="sc">#'+e.id+' · '+(e.score==null?'-':(typeof sc==='number'? sc.toFixed(4): sc))+'</span></div>'+
+      '<div class="bar"><i style="width:'+pct+'%"></i></div>'+
+      '<div class="tx">'+esc((e.text||'').slice(0,110))+'</div>'+
+    '</div>';
+  }).join('');
+}
+</script>
+</body>
+</html>
